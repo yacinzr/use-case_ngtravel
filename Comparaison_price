@@ -1,0 +1,92 @@
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import pandas as pd
+
+import openai
+
+import pandas as pd
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import openai
+
+# Définition de la base de données
+Base = declarative_base()
+
+# Définition de la classe PriceData
+class PriceData(Base):
+    __tablename__ = 'price_data'
+    id = Column(Integer, primary_key=True)
+    source = Column(String)
+    price = Column(Float)
+    date = Column(DateTime)
+
+# Connexion à la base de données
+engine = create_engine('mssql+pymssql://admin:root@server/scrape_db')
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine)
+
+def store_data_from_csv(csv_file):
+    session = Session()
+    
+    df = pd.read_csv(csv_file)
+    
+    try:
+        # Itération sur les lignes du DataFrame et insertion dans la BD
+        for index, row in df.iterrows():
+            price_data = PriceData(
+                source=row['name'],
+                price=row['price'],
+                date=row['web-site']
+            )
+            session.add(price_data)
+        
+        # Validation des changements et fermeture de la session
+        session.commit()
+        print("Données stockées avec succès dans la base de données.")
+    except Exception as e:
+        print(f"Erreur lors du stockage des données : {e}")
+        session.rollback()
+    finally:
+        session.close()
+
+def analyze_data(data):
+    openai.api_key = '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'
+    prompt = f"Analyze the following price data for the Kappa Club Iberostar Palmeraie Marrakech 4* package: {data}"
+    response = openai.Completion.create(
+        engine="text-davinci-002",
+        prompt=prompt,
+        max_tokens=200
+    )
+    return response.choices[0].text.strip()
+
+def fetch_data_from_db():
+    session = Session()
+    data = session.query(PriceData).all()
+    session.close()
+    return data
+
+def main():
+    # Étape 1 : Stockage des données depuis le CSV
+    csv_file = 'combined_hotels.csv'
+    print("Stockage des données depuis le fichier CSV...")
+    store_data_from_csv(csv_file)
+
+    # Étape 2 : Récupération des données depuis la base de données
+    print("Récupération des données depuis la base de données...")
+    data = fetch_data_from_db()
+
+    # Étape 3 : Analyse des données avec OpenAI
+    print("Analyse des données avec OpenAI...")
+    insights = analyze_data(data)
+
+    # Étape 4 : Affichage des résultats
+    print("\nRésultats de l'analyse :")
+    print(insights)
+
+if __name__ == "__main__":
+    main()
